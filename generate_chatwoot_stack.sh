@@ -37,6 +37,42 @@ done
 '"
 echo "✅ Backup de todos os volumes do Chatwoot criado no servidor de origem em ${REMOTE_BACKUP_DIR}/"
 
+# --------------------------------------------------------------------------------------
+
+echo "📦 Fazendo importação dos volumes"
+rsync -avz -e "ssh -c aes128-ctr" --progress $REMOTE_USER@$REMOTE_HOST:/tmp/chatwoot_backup/chatwoot_data.tar.gz ~/chatwoot/volumes/
+echo "✅ Importação dos volumes concluída"
+# --------------------------------------------------------------------------------------
+
+# Executa o dump do banco de dados no container correto
+sshpass -p "$SSH_PASS" ssh $REMOTE_USER@$REMOTE_HOST bash -c "'
+# Identifica o container do Postgres (pega o primeiro que encontrar)
+PG_CONTAINER=\$(docker ps --filter name=postgres --format \"{{.Names}}\" | head -n1)
+
+if [ -z \"\$PG_CONTAINER\" ]; then
+    echo \"❌ Nenhum container Postgres encontrado\"
+    exit 1
+fi
+
+echo \"🔹 Exportando banco do container \$PG_CONTAINER...\"
+
+# Define nome do arquivo de backup com timestamp
+DATA=\$(date +\"%Y%m%d-%H%M%S\")
+BACKUP_FILE=${REMOTE_BACKUP_DIR}/chatwoot_db.dump
+
+# Executa pg_dump no formato custom (-Fc)
+docker exec \$PG_CONTAINER pg_dump -U postgres -Fc --no-acl --no-owner chatwoot > \$BACKUP_FILE
+
+echo \"✅ Backup do banco criado no servidor de origem em: \$BACKUP_FILE\"
+'"
+
+# --------------------------------------------------------------------------------------
+
+echo "📦 Fazendo importação do Banco de dados"
+rsync -avz -P $REMOTE_USER@$REMOTE_HOST:/tmp/chatwoot_backup/chatwoot_db.dump ~/chatwoot/postgresql/
+echo "✅ Importação do Banco de Dados concluída"
+# --------------------------------------------------------------------------------------
+
 # === Extrair variáveis de todos os containers Chatwoot e criar .env remoto ===
 sshpass -p "$SSH_PASS" ssh $REMOTE_USER@$REMOTE_HOST bash -c "'
 mkdir -p /tmp/chatwoot_backup
