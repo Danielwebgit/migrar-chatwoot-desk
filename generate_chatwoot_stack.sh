@@ -14,6 +14,10 @@ FRONTEND_URL="chatwoot.seu_dominio.com.br"
 POSTGRES_PORT="5432" #Normalmente é 5432, mas pode ser alterada
 #------------------------------------------------ Backup e cópia dos volumes -----------------------------------------------
 
+docker service scale $(docker service ls --format '{{.Name}}' \
+  | grep -E 'chatwoot|sidekiq|redis|postgres' \
+  | sed 's/$/=0/')
+
 # Cria diretório remoto
 sshpass -p "$SSH_PASS" ssh $REMOTE_USER@$REMOTE_HOST "mkdir -p ${REMOTE_BACKUP_DIR}"
 
@@ -37,11 +41,6 @@ done
 '"
 echo "✅ Backup de todos os volumes do Chatwoot criado no servidor de origem em ${REMOTE_BACKUP_DIR}/"
 
-# --------------------------------------------------------------------------------------
-
-echo "📦 Fazendo importação dos volumes"
-rsync -avz -e "ssh -c aes128-ctr" --progress $REMOTE_USER@$REMOTE_HOST:/tmp/chatwoot_backup/chatwoot_data.tar.gz ~/chatwoot/volumes/
-echo "✅ Importação dos volumes concluída"
 # --------------------------------------------------------------------------------------
 
 # Executa o dump do banco de dados no container correto
@@ -72,6 +71,14 @@ echo "📦 Fazendo importação do Banco de dados"
 rsync -avz -P $REMOTE_USER@$REMOTE_HOST:/tmp/chatwoot_backup/chatwoot_db.dump ~/chatwoot/postgresql/
 echo "✅ Importação do Banco de Dados concluída"
 # --------------------------------------------------------------------------------------
+echo "📦 Fazendo importação dos volumes"
+rsync -avz -e "ssh -c aes128-ctr" --progress $REMOTE_USER@$REMOTE_HOST:/tmp/chatwoot_backup/chatwoot_data.tar.gz ~/chatwoot/volumes/
+echo "✅ Importação dos volumes concluída"
+# --------------------------------------------------------------------------------------
+
+docker service scale $(docker service ls --format '{{.Name}}' \
+  | grep -E 'chatwoot|sidekiq|redis|postgres' \
+  | sed 's/$/=1/')
 
 # === Extrair variáveis de todos os containers Chatwoot e criar .env remoto ===
 sshpass -p "$SSH_PASS" ssh $REMOTE_USER@$REMOTE_HOST bash -c "'
